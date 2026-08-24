@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="HomeVideoPlayer.WebApi.Tests/HomeVideoPlayer.WebApi.Tests.csproj" />
+  <Project Path="HomeVideoPlayer.WebApi/HomeVideoPlayer.WebApi.csproj" />
+</Solution>
