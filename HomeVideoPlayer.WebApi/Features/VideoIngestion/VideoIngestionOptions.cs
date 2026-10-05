@@ -8,4 +8,6 @@ public class VideoIngestionOptions
     public int PollIntervalSeconds { get; set; } = 60;
     public required string LongTermStorage { get; set; }
     public required string BackupStorage { get; set; }
+    public required string QuarantineDirectory { get; set; }
+    public required List<string> SupportedFileTypes { get; set; }
 }

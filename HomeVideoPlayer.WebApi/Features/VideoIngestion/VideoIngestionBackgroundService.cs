@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using ErrorOr;
@@ -15,8 +16,15 @@ public class VideoIngestionBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly VideoIngestionOptions _options;
 
+    private readonly HashSet<string> _quarantinedFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _retryCountByFile = new(
+        StringComparer.OrdinalIgnoreCase
+    );
+
     // todo-bf: add to program.cs on startup
     // todo-bf: add getting the options into program.cs, for this specific section -> also do the config validation
+    // todo-bf: remove the .mp4 from InputFolder
+    // todo-bf: why are 00000 - 00002 being copied to quarantine, and longterm storage? something is wrong here
     public VideoIngestionBackgroundService(
         ILogger<VideoIngestionBackgroundService> logger,
         IServiceScopeFactory scopeFactory,
@@ -46,91 +54,204 @@ public class VideoIngestionBackgroundService : BackgroundService
 
     private async Task ProcessFolder(CancellationToken cancellationToken)
     {
-        var files = Directory.GetFiles(_options.InputDirectory);
+        var files = Directory
+            .GetFiles(_options.InputDirectory)
+            .Where(path =>
+                _options.SupportedFileTypes.Contains(
+                    Path.GetExtension(path),
+                    StringComparer.OrdinalIgnoreCase
+                )
+            )
+            .Where(path => !_quarantinedFiles.Contains(path))
+            .ToArray();
+
         if (files.Length == 0)
+        {
+            return;
+        }
+
+        var fileDateTimes = await GetMetadataFromFile(files, cancellationToken);
+
+        foreach (var filePath in files)
+        {
+            if (_quarantinedFiles.Contains(filePath))
+            {
+                continue;
+            }
+
+            if (!fileDateTimes.TryGetValue(filePath, out var fileDate))
+            {
+                RegisterFailure(filePath);
+                continue;
+            }
+
+            var attempts = _retryCountByFile.GetValueOrDefault(filePath);
+
+            var succeeded = await ProcessSingleFileAsync(filePath, fileDate, cancellationToken);
+
+            if (!succeeded)
+            {
+                RegisterFailure(filePath);
+                continue;
+            }
+
+            _retryCountByFile.Remove(filePath);
+        }
+    }
+
+    private void RegisterFailure(string filePath)
+    {
+        var attempts = _retryCountByFile.GetValueOrDefault(filePath);
+
+        if (attempts >= 1)
+        {
+            QuarantineFile(filePath, "Failed after second attempt.");
+            _quarantinedFiles.Add(filePath);
+            _retryCountByFile.Remove(filePath);
+            return;
+        }
+
+        _retryCountByFile[filePath] = attempts + 1;
+        _logger.LogWarning(
+            "File failed processing. Retrying once more: {FilePath}. Attempt {Attempt}/2",
+            filePath,
+            attempts + 1
+        );
+    }
+
+    private async Task<bool> ProcessSingleFileAsync(
+        string filePath,
+        DateTime fileDate,
+        CancellationToken cancellationToken
+    )
+    {
+        string? backupFilePath = null;
+        string? convertedFilePath = null;
+        string? longTermFilePath = null;
+        var metadataSaved = false;
+
+        try
+        {
+            var originalFileHash = ComputeFileHash(filePath);
+
+            var backupResult = await CopyFile(
+                filePath,
+                originalFileHash,
+                _options.BackupStorage,
+                cancellationToken
+            );
+
+            if (backupResult.IsError)
+            {
+                return false;
+            }
+            backupFilePath = backupResult.Value;
+
+            var conversionResult = await ConvertFileContainer(filePath, cancellationToken);
+            if (conversionResult.IsError)
+            {
+                return false;
+            }
+
+            var convertedFile = conversionResult.Value;
+            convertedFilePath = convertedFile;
+            var newFileHash = ComputeFileHash(convertedFile);
+            var longTermCopyResult = await CopyFile(
+                convertedFile,
+                newFileHash,
+                _options.LongTermStorage,
+                cancellationToken
+            );
+
+            if (longTermCopyResult.IsError)
+            {
+                return false;
+            }
+
+            longTermFilePath = longTermCopyResult.Value;
+
+            using var scope = _scopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            dbContext.Videos.Add(
+                new Video
+                {
+                    VideoName = Path.GetFileName(longTermFilePath),
+                    StoragePath = Path.GetRelativePath(_options.LongTermStorage, longTermFilePath),
+                    BackupPath = Path.GetRelativePath(_options.BackupStorage, backupFilePath),
+                    VideoDate = fileDate,
+                    OriginalFileHash = originalFileHash,
+                    NewFileHash = newFileHash,
+                }
+            );
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            metadataSaved = true;
+
+            File.Delete(filePath);
+            File.Delete(convertedFilePath);
+            return true;
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Failed to save metadata for {FilePath}", filePath);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected failure processing {FilePath}", filePath);
+            return false;
+        }
+        finally
+        {
+            TryDeleteGeneratedFile(convertedFilePath);
+
+            if (!metadataSaved)
+            {
+                TryDeleteGeneratedFile(backupFilePath);
+                TryDeleteGeneratedFile(longTermFilePath);
+            }
+        }
+    }
+
+    private void TryDeleteGeneratedFile(string? generatedFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(generatedFilePath))
         {
             return;
         }
 
         try
         {
-            var fileDateTimes = await GetMetadataFromFile(files, cancellationToken);
-
-            if (fileDateTimes.Count == 0)
-            {
-                _logger.LogInformation("No metadata to save.");
-                return;
-            }
-
-            await ProcessFiles(fileDateTimes, cancellationToken);
+            File.Delete(generatedFilePath);
         }
-        catch (Exception) { }
-    }
-
-    private async Task ProcessFiles(
-        Dictionary<string, DateTime> files,
-        CancellationToken cancellationToken
-    )
-    {
-        var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        foreach (var file in files)
+        catch (Exception ex)
         {
-            var fileHash = ComputeFileHash(file.Key);
-            var backUpStorage = _options.BackupStorage;
-
-            var copySucceeded = await CopyFile(
-                file.Key,
-                fileHash,
-                backUpStorage,
-                cancellationToken
+            _logger.LogWarning(
+                ex,
+                "Unable to clean up generated file {FilePath}",
+                generatedFilePath
             );
-            if (!copySucceeded)
-            {
-                continue;
-            }
-
-            var conversionResult = await ConvertFileContainer(file.Key, cancellationToken);
-            if (conversionResult.IsError)
-            {
-                continue;
-            }
-
-            var longTermStorage = _options.LongTermStorage;
-            var convertedFile = conversionResult.Value;
-            await CopyFile(convertedFile, fileHash, longTermStorage, cancellationToken);
-
-            var video = new Video
-            {
-                VideoName = convertedFile,
-                VideoDate = file.Value,
-                FileHash = fileHash,
-            };
-            dbContext.Videos.Add(video);
-            try
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-
-                File.Delete(file.Key);
-            }
-            catch (DbUpdateException ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Failed to save video metadata for {File}",
-                    conversionResult.Value
-                );
-
-                File.Delete(convertedFile);
-                File.Delete(backUpStorage);
-
-                continue;
-            }
         }
     }
 
-    private async Task<bool> CopyFile(
+    private void QuarantineFile(string filePath, string reason)
+    {
+        Directory.CreateDirectory(_options.QuarantineDirectory);
+
+        var quarantinePath = Path.Combine(_options.QuarantineDirectory, Path.GetFileName(filePath));
+
+        if (File.Exists(quarantinePath))
+        {
+            File.Delete(quarantinePath);
+        }
+
+        File.Move(filePath, quarantinePath);
+
+        _logger.LogError("Quarantined file {FilePath} because: {Reason}", filePath, reason);
+    }
+
+    private async Task<ErrorOr<string>> CopyFile(
         string filePath,
         string originalHash,
         string copyLocation,
@@ -138,30 +259,54 @@ public class VideoIngestionBackgroundService : BackgroundService
     )
     {
         var destinationPath = Path.Combine(copyLocation, Path.GetFileName(filePath));
+        var destinationCreated = false;
         try
         {
             await using var sourceStream = File.OpenRead(filePath);
             await using var destStream = File.Create(destinationPath);
+            destinationCreated = true;
             await sourceStream.CopyToAsync(destStream, cancellationToken);
         }
         catch (Exception ex)
         {
+            if (destinationCreated)
+            {
+                TryDeleteGeneratedFile(destinationPath);
+            }
+
             _logger.LogError(
                 ex,
-                "Unable to copy {filePath} to long term storage: {longTermStorage}",
+                "Unable to copy {FilePath} to {CopyLocation}",
                 filePath,
                 copyLocation
             );
-            return false;
+            return Error.Failure(code: "FileCopyFailed", description: ex.Message);
         }
 
-        if (originalHash != ComputeFileHash(copyLocation))
+        try
         {
-            _logger.LogError("Hash of file before and after copy do not match. Ingestion Skipped.");
-            File.Delete(copyLocation);
-            return false;
+            if (originalHash != ComputeFileHash(destinationPath))
+            {
+                _logger.LogError(
+                    "Hash mismatch copying {FilePath} to {DestinationPath}",
+                    filePath,
+                    destinationPath
+                );
+                TryDeleteGeneratedFile(destinationPath);
+                return Error.Failure(
+                    code: "FileCopyHashMismatch",
+                    description: "Copied file hash does not match the source."
+                );
+            }
         }
-        return true;
+        catch (Exception ex)
+        {
+            TryDeleteGeneratedFile(destinationPath);
+            _logger.LogError(ex, "Unable to verify copied file {DestinationPath}", destinationPath);
+            return Error.Failure(code: "FileCopyVerificationFailed", description: ex.Message);
+        }
+
+        return destinationPath;
     }
 
     private static string ComputeFileHash(string filePath)
@@ -192,9 +337,16 @@ public class VideoIngestionBackgroundService : BackgroundService
                     CreateNoWindow = true,
                 },
             };
+            process.StartInfo.ArgumentList.Add("-nostdin");
+            process.StartInfo.ArgumentList.Add("-y");
             process.StartInfo.ArgumentList.Add("-i");
             process.StartInfo.ArgumentList.Add(inFile);
-            process.StartInfo.ArgumentList.Add("-c:v copy -c:a aac -b:a 192k");
+            process.StartInfo.ArgumentList.Add("-c:v");
+            process.StartInfo.ArgumentList.Add("copy");
+            process.StartInfo.ArgumentList.Add("-c:a");
+            process.StartInfo.ArgumentList.Add("aac");
+            process.StartInfo.ArgumentList.Add("-b:a");
+            process.StartInfo.ArgumentList.Add("192k");
             process.StartInfo.ArgumentList.Add(outFile);
 
             process.Start();
@@ -204,6 +356,8 @@ public class VideoIngestionBackgroundService : BackgroundService
 
             if (process.ExitCode != 0)
             {
+                _logger.LogError("VideoConversionFailed: {}", errorOutput);
+                TryDeleteGeneratedFile(outFile);
                 return Error.Failure(code: "VideoConversionFailed", description: errorOutput);
             }
 
@@ -212,6 +366,7 @@ public class VideoIngestionBackgroundService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unable to convert {FilePath}.", inFile);
+            TryDeleteGeneratedFile(outFile);
 
             return Error.Failure(code: "VideoConversionFailed", description: ex.Message);
         }
@@ -270,12 +425,31 @@ public class VideoIngestionBackgroundService : BackgroundService
             if (entry.TryGetProperty("DateTimeOriginal", out var dateProp))
             {
                 var raw = dateProp.GetString();
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    raw = System.Text.RegularExpressions.Regex.Replace(
+                        raw,
+                        @"\s+[A-Za-z]{2,5}$",
+                        string.Empty
+                    );
+                }
+
+                var formats = new[]
+                {
+                    "yyyy:MM:dd HH:mm:ss",
+                    "yyyy:MM:dd HH:mm:sszzz",
+                    "yyyy:MM:dd HH:mm:ss zzz",
+                    "yyyy-MM-dd HH:mm:ss",
+                    "yyyy-MM-ddTHH:mm:ss",
+                    "yyyy-MM-ddTHH:mm:ssK",
+                };
+
                 if (
                     DateTime.TryParseExact(
                         raw,
-                        "yyyy:MM:dd HH:mm:ss",
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        System.Globalization.DateTimeStyles.None,
+                        formats,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
                         out var parsed
                     )
                 )
@@ -284,10 +458,7 @@ public class VideoIngestionBackgroundService : BackgroundService
                 }
                 else
                 {
-                    _logger.LogError(
-                        "Unable to fetch creation date for {SourceFile}. File will be skipped.",
-                        sourceFile
-                    );
+                    _logger.LogError("Unable to fetch creation date for {SourceFile}.", sourceFile);
                 }
             }
         }

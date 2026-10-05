@@ -1,10 +1,6 @@
-- Store video metadata
-  - Exiftool to extract creation date / duration / filesize
-  - Store in database Videos table with filename made of creation datetime
-- Convert to .mp4 (copy)
-  - Copy file to mp4
-  - Remove db info for .mts (do not delete, until proper db infrastructure & RAID drives..)
-- Add a quarantine folder, so items that fail continuously are not constantly being retried
+- Currently if there is a DB error / general error the operation is not tidied up.
+- Tests
+- Manually test quarantine
 - Create front end
   - API to fetch video information
   - Sort into a table (thumbnails?)
