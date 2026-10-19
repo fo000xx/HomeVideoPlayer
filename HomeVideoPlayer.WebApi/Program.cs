@@ -1,9 +1,9 @@
 using HomeVideoPlayer.WebApi.Data;
 using HomeVideoPlayer.WebApi.Features.VideoIngestion;
+using HomeVideoPlayer.WebApi.Features.Videos.GetVideos;
 using Microsoft.EntityFrameworkCore;
 
-var builder = Host.CreateApplicationBuilder(args);
-var config = builder.Configuration.GetSection("VideoIngestionOptions");
+var builder = WebApplication.CreateBuilder(args);
 
 builder
     .Services.AddOptions<VideoIngestionOptions>()
@@ -27,6 +27,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 );
 
 builder.Services.AddHostedService<VideoIngestionBackgroundService>();
+builder.Services.AddScoped<GetVideosHandler>();
 
-var host = builder.Build();
-host.Run();
+var app = builder.Build();
+app.MapGetVideosEndpoint();
+app.Run();
+
+public partial class Program { }
