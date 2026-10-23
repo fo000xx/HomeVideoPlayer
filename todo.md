@@ -1,5 +1,4 @@
 - Create front end
-  - As a user I'd like to view the list of videos in the database
   - As a user I'd like to replay a video
   - As a user I'd like to see extended metadata of a video
   - API to fetch video information

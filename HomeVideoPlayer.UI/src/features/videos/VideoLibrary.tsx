@@ -8,6 +8,8 @@ import {
 
 function VideoLibrary() {
   const [items, setItems] = useState<VideoItem[]>([])
+  const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null)
+  const [playbackError, setPlaybackError] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [sortBy, setSortBy] = useState<VideoSortField>('date')
@@ -54,6 +56,24 @@ function VideoLibrary() {
       <h1>Video library</h1>
       <p>{totalCount} {totalCount === 1 ? 'video' : 'videos'}</p>
 
+      {selectedVideo && (
+        <section className="video-player-section" aria-labelledby="selected-video-heading">
+          <h2 id="selected-video-heading">{selectedVideo.videoName}</h2>
+          <video
+            key={selectedVideo.videoId}
+            className="video-player"
+            src={`/api/videos/${selectedVideo.videoId}/stream`}
+            controls
+            preload="metadata"
+            aria-label={`Video player for ${selectedVideo.videoName}`}
+            onError={() => setPlaybackError('Unable to load or play this video.')}
+          >
+            Your browser does not support HTML video playback.
+          </video>
+          {playbackError && <p role="alert">{playbackError}</p>}
+        </section>
+      )}
+
       {status === 'error' ? (
         <div role="alert">
           <p>{errorMessage}</p>
@@ -89,7 +109,17 @@ function VideoLibrary() {
           <tbody>
             {status === 'loading' && items.length === 0 ? (
               <tr><td colSpan={3}>Loading videos…</td></tr>
-            ) : items.map((video) => <VideoRow key={video.videoId} video={video} />)}
+            ) : items.map((video) => (
+              <VideoRow
+                key={video.videoId}
+                video={video}
+                selected={selectedVideo?.videoId === video.videoId}
+                onSelect={() => {
+                  setSelectedVideo(video)
+                  setPlaybackError('')
+                }}
+              />
+            ))}
           </tbody>
         </table>
       )}
@@ -129,7 +159,15 @@ function VideoLibrary() {
   )
 }
 
-function VideoRow({ video }: { video: VideoItem }) {
+function VideoRow({
+  video,
+  selected,
+  onSelect,
+}: {
+  video: VideoItem
+  selected: boolean
+  onSelect: () => void
+}) {
   const formattedDate = new Intl.DateTimeFormat(undefined, {
     year: 'numeric',
     month: 'short',
@@ -138,7 +176,17 @@ function VideoRow({ video }: { video: VideoItem }) {
 
   return (
     <tr>
-      <td>{video.videoName}</td>
+      <td>
+        <button
+          type="button"
+          className="video-select-button"
+          aria-label={`Play ${video.videoName}`}
+          aria-pressed={selected}
+          onClick={onSelect}
+        >
+          {video.videoName}
+        </button>
+      </td>
       <td><time dateTime={video.videoDate}>{formattedDate}</time></td>
       <td>{video.tags.length > 0 ? video.tags.join(', ') : '—'}</td>
     </tr>
