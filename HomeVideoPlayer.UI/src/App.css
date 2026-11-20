@@ -148,7 +148,8 @@
 }
 
 .tag-create-form input,
-.video-tag-assignment {
+.video-tag-assignment,
+.video-tag-input-wrapper input {
   font: inherit;
   color: var(--text-h);
   background: var(--bg);
@@ -187,6 +188,7 @@
 }
 
 .video-tag-assignment {
+  position: relative;
   margin: 8px 0;
   padding: 6px 8px;
   text-align: left;
@@ -197,16 +199,85 @@
   font-size: 0.85em;
 }
 
-.video-tag-options {
+.video-tag-labels {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-.video-tag-options label {
+.video-tag-label {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--text-h);
+  background: var(--accent-bg);
+}
+
+.video-tag-label button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.video-tag-label button:hover {
+  background: var(--accent-border);
+}
+
+.video-tag-input-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.85em;
+}
+
+.video-tag-input-wrapper {
+  position: relative;
+}
+
+.video-tag-input-wrapper input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 4px 8px;
+}
+
+.video-tag-suggestions {
+  position: absolute;
+  z-index: 1;
+  top: 100%;
+  right: 0;
+  left: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  list-style: none;
+}
+
+.video-tag-suggestions li {
+  padding: 4px 8px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.video-tag-suggestions li[aria-selected='true'],
+.video-tag-suggestions li:hover {
+  background: var(--accent-bg);
 }
 
 .hero {

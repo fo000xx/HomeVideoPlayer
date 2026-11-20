@@ -1,8 +1,10 @@
 - propose changes, don't just make them..
 - skills / instructions ?
+- cypress tests
 - file name =! video name. New field for the name of the video. Remove the .mp4 and display number if there is no file name set. Give user the abiltiy to add file names
 - Create front end
   - tags as labels with x, not checkboxes
+  - change the layout, name and date, with tags more streamlined next to it & thumbnail. Not blocky
   - remove tags
     - say how many videos will be untagged
 - Allow playing all by tags
@@ -10,6 +12,8 @@
 - pictures from camcorder
 - media from phone?
 - tag change to and/or
+- random video button
+  - depending on tag filter currently selected
 
 - Move to postgres
 - Host in container?

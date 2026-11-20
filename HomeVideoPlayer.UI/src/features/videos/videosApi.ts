@@ -8,6 +8,7 @@ export interface VideoItem {
 export interface TagOption {
   tagId: number
   name: string
+  videoCount: number
 }
 
 export interface VideoPage {
