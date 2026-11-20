@@ -38,6 +38,6 @@ public sealed class CreateTagHandler(AppDbContext dbContext)
         dbContext.Tags.Add(tag);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new TagResponse(tag.TagId, tag.Name);
+        return new TagResponse(tag.TagId, tag.Name, 0);
     }
 }

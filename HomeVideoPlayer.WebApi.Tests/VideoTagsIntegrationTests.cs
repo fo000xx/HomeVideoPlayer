@@ -110,10 +110,13 @@ public sealed class VideoTagsIntegrationTests
         using var tagsResponse = await client.GetAsync("/api/tags");
         using var tagsJson = JsonDocument.Parse(await tagsResponse.Content.ReadAsStringAsync());
         Assert.Equal("family", tagsJson.RootElement[0].GetProperty("name").GetString());
+        Assert.Equal(0, tagsJson.RootElement[0].GetProperty("videoCount").GetInt32());
+        Assert.Equal(1, tagsJson.RootElement[1].GetProperty("videoCount").GetInt32());
 
         using var tagResponse = await client.GetAsync($"/api/tags/{tagId}");
         using var tagJson = JsonDocument.Parse(await tagResponse.Content.ReadAsStringAsync());
         Assert.Equal("family", tagJson.RootElement.GetProperty("name").GetString());
+        Assert.Equal(0, tagJson.RootElement.GetProperty("videoCount").GetInt32());
 
         using var deleteResponse = await client.DeleteAsync($"/api/tags/{secondTagId}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);

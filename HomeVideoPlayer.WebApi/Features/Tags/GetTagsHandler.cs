@@ -11,7 +11,7 @@ public sealed class GetTagsHandler(AppDbContext dbContext)
         await dbContext
             .Tags.AsNoTracking()
             .OrderBy(tag => tag.Name)
-            .Select(tag => new TagResponse(tag.TagId, tag.Name))
+            .Select(tag => new TagResponse(tag.TagId, tag.Name, tag.Videos.Count))
             .ToListAsync(cancellationToken);
 
     public async Task<TagResponse?> HandleByIdAsync(
@@ -21,6 +21,6 @@ public sealed class GetTagsHandler(AppDbContext dbContext)
         await dbContext
             .Tags.AsNoTracking()
             .Where(tag => tag.TagId == tagId)
-            .Select(tag => new TagResponse(tag.TagId, tag.Name))
+            .Select(tag => new TagResponse(tag.TagId, tag.Name, tag.Videos.Count))
             .SingleOrDefaultAsync(cancellationToken);
 }

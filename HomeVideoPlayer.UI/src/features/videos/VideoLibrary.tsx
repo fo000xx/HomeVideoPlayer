@@ -159,6 +159,7 @@ function VideoLibrary() {
     await replaceVideoTags(videoId, tagIds)
     setStatus('loading')
     setRequestVersion((value) => value + 1)
+    setTagRequestVersion((value) => value + 1)
   }
 
   return (
@@ -228,7 +229,7 @@ function VideoLibrary() {
                       )
                     }}
                   />
-                  {tag.name}
+                  {tag.name} ({tag.videoCount})
                 </label>
               ))}
             </div>
@@ -409,7 +410,7 @@ function VideoLibrary() {
             <ul className="managed-tag-list" aria-labelledby="existing-tags-heading">
               {tags.map((tag) => (
                 <li key={tag.tagId}>
-                  <span>{tag.name}</span>
+                  <span>{tag.name} ({tag.videoCount} {tag.videoCount === 1 ? 'video' : 'videos'})</span>
                   <button
                     type="button"
                     disabled={removingTagId !== null}
@@ -456,12 +457,19 @@ function VideoRow({
   onSaveTags: (videoId: number, tagIds: number[]) => Promise<void>
 }) {
   const [selectedTagNames, setSelectedTagNames] = useState([...video.tags])
+  const [tagSearch, setTagSearch] = useState('')
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
   const [savingTags, setSavingTags] = useState(false)
   const [tagSaveError, setTagSaveError] = useState('')
 
-  const hasTagChanges =
-    selectedTagNames.length !== video.tags.length
-    || selectedTagNames.some((tagName) => !video.tags.includes(tagName))
+  const suggestions = tags.filter((tag) =>
+    !selectedTagNames.includes(tag.name)
+    && tag.name.toLocaleLowerCase().includes(tagSearch.trim().toLocaleLowerCase()),
+  )
+  const showSuggestions = tagSearch.trim().length > 0 && suggestions.length > 0
+  const noMatchingTags = tagSearch.trim().length > 0 && suggestions.length === 0
+  const inputId = `video-tag-input-${video.videoId}`
+  const suggestionsId = `video-tag-suggestions-${video.videoId}`
 
   const formattedDate = new Intl.DateTimeFormat(undefined, {
     year: 'numeric',
@@ -469,20 +477,28 @@ function VideoRow({
     day: 'numeric',
   }).format(new Date(video.videoDate))
 
-  async function saveTags() {
+  async function updateTags(nextTagNames: string[]) {
     setSavingTags(true)
     setTagSaveError('')
 
     try {
       const selectedTagIds = tags
-        .filter((tag) => selectedTagNames.includes(tag.name))
+        .filter((tag) => nextTagNames.includes(tag.name))
         .map((tag) => tag.tagId)
       await onSaveTags(video.videoId, selectedTagIds)
+      setSelectedTagNames(nextTagNames)
+      setTagSearch('')
+      setActiveSuggestionIndex(0)
     } catch (error: unknown) {
       setTagSaveError(error instanceof Error ? error.message : 'Unable to save video tags.')
     } finally {
       setSavingTags(false)
     }
+  }
+
+  function addTag(tagName: string) {
+    if (selectedTagNames.includes(tagName) || savingTags) return
+    void updateTags([...selectedTagNames, tagName])
   }
 
   return (
@@ -506,31 +522,86 @@ function VideoRow({
           {tags.length === 0 ? (
             <p>No tags available.</p>
           ) : (
-            <div className="video-tag-options">
-              {tags.map((tag) => (
-                <label key={tag.tagId}>
-                  <input
-                    type="checkbox"
-                    checked={selectedTagNames.includes(tag.name)}
-                    onChange={(event) => {
-                      const checked = event.currentTarget.checked
-                      setSelectedTagNames((current) =>
-                        checked
-                          ? [...current, tag.name]
-                          : current.filter((tagName) => tagName !== tag.name),
+            <>
+              <div className="video-tag-labels" aria-label={`Current tags for ${video.videoName}`}>
+                {selectedTagNames.map((tagName) => (
+                  <span className="video-tag-label" key={tagName}>
+                    {tagName}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${tagName} tag from ${video.videoName}`}
+                      onClick={() => {
+                        setTagSaveError('')
+                        void updateTags(selectedTagNames.filter((current) => current !== tagName))
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <label className="video-tag-input-label" htmlFor={inputId}>
+                Add a tag
+              </label>
+              <div className="video-tag-input-wrapper">
+                <input
+                  id={inputId}
+                  type="text"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={showSuggestions}
+                  aria-controls={showSuggestions ? suggestionsId : undefined}
+                  aria-activedescendant={
+                    showSuggestions
+                      ? `${suggestionsId}-${activeSuggestionIndex}`
+                      : undefined
+                  }
+                  autoComplete="off"
+                  value={tagSearch}
+                  onChange={(event) => {
+                    setTagSearch(event.target.value)
+                    setActiveSuggestionIndex(0)
+                    setTagSaveError('')
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowDown' && showSuggestions) {
+                      event.preventDefault()
+                      setActiveSuggestionIndex((index) => (index + 1) % suggestions.length)
+                    } else if (event.key === 'ArrowUp' && showSuggestions) {
+                      event.preventDefault()
+                      setActiveSuggestionIndex((index) =>
+                        (index - 1 + suggestions.length) % suggestions.length,
                       )
-                      setTagSaveError('')
-                    }}
-                  />
-                  {tag.name}
-                </label>
-              ))}
-            </div>
+                    } else if (event.key === 'Enter' && showSuggestions) {
+                      event.preventDefault()
+                      addTag(suggestions[activeSuggestionIndex]?.name ?? suggestions[0].name)
+                    } else if (event.key === 'Escape') {
+                      setTagSearch('')
+                    }
+                  }}
+                />
+                {showSuggestions && (
+                  <ul id={suggestionsId} className="video-tag-suggestions" role="listbox">
+                    {suggestions.map((tag, index) => (
+                      <li
+                        id={`${suggestionsId}-${index}`}
+                        key={tag.tagId}
+                        role="option"
+                        aria-selected={index === activeSuggestionIndex}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => addTag(tag.name)}
+                      >
+                        {tag.name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {noMatchingTags && <p>No matching tags.</p>}
+            </>
           )}
         </fieldset>
-        <button type="button" disabled={!hasTagChanges || savingTags} onClick={saveTags}>
-          {savingTags ? 'Saving…' : 'Save tags'}
-        </button>
+        {savingTags && <p>Saving tags…</p>}
         {tagSaveError && <p role="alert">{tagSaveError}</p>}
       </td>
     </tr>
