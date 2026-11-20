@@ -1,18 +1,17 @@
+- propose changes, don't just make them..
+- skills / instructions ?
+- file name =! video name. New field for the name of the video. Remove the .mp4 and display number if there is no file name set. Give user the abiltiy to add file names
 - Create front end
-  - As a user I'd like to view the list of videos in the database
-  - As a user I'd like to replay a video
-  - As a user I'd like to see extended metadata of a video
-  - API to fetch video information
-  - Sort into a table (thumbnails?)
-  - Paginate the data
-- Allow playback in UI
-  - How to provide video to browser?
-- Allow adding tags
-  - insert into DB
-- Allow sorting by tags
-  - Select pre-determined tags
-  - Once one is selected, allow a second select for matches
+  - tags as labels with x, not checkboxes
+  - remove tags
+    - say how many videos will be untagged
 - Allow playing all by tags
+- manage tags not add
+- pictures from camcorder
+- media from phone?
+- tag change to and/or
 
-
-- Hardware...
+- Move to postgres
+- Host in container?
+- Set-up home server to host
+- sort out home dns to allow easier routing

@@ -10,6 +10,5 @@ public class Video
     public required string OriginalFileHash { get; set; }
     public required string NewFileHash { get; set; }
 
-    // todo-bf: this should be a json array instead, in the db?
-    public List<string>? Tags { get; set; }
+    public List<Tag> Tags { get; set; } = [];
 }

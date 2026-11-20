@@ -17,6 +17,26 @@ namespace HomeVideoPlayer.WebApi.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("HomeVideoPlayer.WebApi.Data.Entities.Tag", b =>
+                {
+                    b.Property<int>("TagId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.HasKey("TagId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Tags");
+                });
+
             modelBuilder.Entity("HomeVideoPlayer.WebApi.Data.Entities.Video", b =>
                 {
                     b.Property<int>("VideoId")
@@ -37,9 +57,6 @@ namespace HomeVideoPlayer.WebApi.Migrations
                     b.Property<string>("StoragePath")
                         .HasColumnType("TEXT");
 
-                    b.PrimitiveCollection<string>("Tags")
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime>("VideoDate")
                         .HasColumnType("TEXT");
 
@@ -50,6 +67,36 @@ namespace HomeVideoPlayer.WebApi.Migrations
                     b.HasKey("VideoId");
 
                     b.ToTable("Videos");
+                });
+
+            modelBuilder.Entity("TagVideo", b =>
+                {
+                    b.Property<int>("TagsTagId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("VideosVideoId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TagsTagId", "VideosVideoId");
+
+                    b.HasIndex("VideosVideoId");
+
+                    b.ToTable("TagVideo");
+                });
+
+            modelBuilder.Entity("TagVideo", b =>
+                {
+                    b.HasOne("HomeVideoPlayer.WebApi.Data.Entities.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagsTagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HomeVideoPlayer.WebApi.Data.Entities.Video", null)
+                        .WithMany()
+                        .HasForeignKey("VideosVideoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

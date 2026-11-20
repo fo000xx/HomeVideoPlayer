@@ -1,3 +1,4 @@
+using System.Globalization;
 using ErrorOr;
 using HomeVideoPlayer.WebApi.Data;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ public sealed class GetVideosHandler(AppDbContext dbContext)
 {
     public async Task<ErrorOr<GetVideosResponse>> HandleAsync(
         GetVideosRequest request,
+        string? rawTagIds,
         CancellationToken cancellationToken
     )
     {
@@ -36,6 +38,54 @@ public sealed class GetVideosHandler(AppDbContext dbContext)
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
         var videos = dbContext.Videos.AsNoTracking();
+        var tagIds = Array.Empty<int>();
+        if (!string.IsNullOrWhiteSpace(rawTagIds))
+        {
+            var parsedTagIds = new List<int>();
+            foreach (var value in rawTagIds.Split(','))
+            {
+                if (
+                    !int.TryParse(
+                        value,
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out var tagId
+                    )
+                )
+                {
+                    return Error.Validation(
+                        code: "InvalidTagIds",
+                        description: "tagIds must be a comma-separated list of tag IDs."
+                    );
+                }
+
+                parsedTagIds.Add(tagId);
+            }
+
+            tagIds = parsedTagIds.Distinct().ToArray();
+        }
+
+        if (tagIds.Length > 0)
+        {
+            var knownTagCount = await dbContext.Tags.CountAsync(
+                tag => tagIds.Contains(tag.TagId),
+                cancellationToken
+            );
+            if (knownTagCount != tagIds.Length)
+            {
+                return Error.Validation(
+                    code: "InvalidTagIds",
+                    description: "All tagIds must refer to existing tags."
+                );
+            }
+
+            foreach (var tagId in tagIds)
+            {
+                var matchingTagId = tagId;
+                videos = videos.Where(video => video.Tags.Any(tag => tag.TagId == matchingTagId));
+            }
+        }
+
         var totalCount = await videos.CountAsync(cancellationToken);
         var descending = string.Equals(
             request.SortOrder,
@@ -64,7 +114,7 @@ public sealed class GetVideosHandler(AppDbContext dbContext)
                 video.VideoId,
                 video.VideoName,
                 video.VideoDate,
-                (IReadOnlyList<string>?)video.Tags ?? Array.Empty<string>()
+                video.Tags.Select(tag => tag.Name).ToList()
             ))
             .ToListAsync(cancellationToken);
 
