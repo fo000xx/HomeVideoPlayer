@@ -35,7 +35,7 @@ public sealed class GetVideosIntegrationTests
             await dbContext.Database.EnsureCreatedAsync();
             dbContext.Videos.AddRange(
                 CreateVideo("Charlie", new DateTime(2026, 3, 1)),
-                CreateVideo("Alpha", new DateTime(2026, 1, 1), ["home"]),
+                CreateVideo("Alpha", new DateTime(2026, 1, 1), [new Tag { Name = "home" }]),
                 CreateVideo("Bravo", new DateTime(2026, 2, 1))
             );
             await dbContext.SaveChangesAsync();
@@ -59,6 +59,7 @@ public sealed class GetVideosIntegrationTests
             items.Select(item => item.GetProperty("videoName").GetString())
         );
         Assert.Equal("home", items[0].GetProperty("tags")[0].GetString());
+        Assert.False(items[0].TryGetProperty("tagIds", out _));
         Assert.Empty(items[1].GetProperty("tags").EnumerateArray());
 
         var responseText = root.GetRawText();
@@ -99,7 +100,7 @@ public sealed class GetVideosIntegrationTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    private static Video CreateVideo(string name, DateTime date, List<string>? tags = null) =>
+    private static Video CreateVideo(string name, DateTime date, List<Tag>? tags = null) =>
         new()
         {
             VideoName = name,
@@ -108,6 +109,6 @@ public sealed class GetVideosIntegrationTests
             NewFileHash = $"new-{name}",
             StoragePath = $"storage/{name}.mp4",
             BackupPath = $"backup/{name}.mts",
-            Tags = tags,
+            Tags = tags ?? [],
         };
 }
