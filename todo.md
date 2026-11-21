@@ -1,6 +1,5 @@
-- propose changes, don't just make them..
 - skills / instructions ?
-- cypress tests
+- UI tests
 - file name =! video name. New field for the name of the video. Remove the .mp4 and display number if there is no file name set. Give user the abiltiy to add file names
 - Create front end
   - tags as labels with x, not checkboxes
@@ -14,8 +13,9 @@
 - tag change to and/or
 - random video button
   - depending on tag filter currently selected
+- bookmarks
 
-- Move to postgres
+- Move to postgres?
 - Host in container?
 - Set-up home server to host
 - sort out home dns to allow easier routing

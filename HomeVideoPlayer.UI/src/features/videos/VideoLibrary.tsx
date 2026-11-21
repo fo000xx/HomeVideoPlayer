@@ -315,7 +315,7 @@ function VideoLibrary() {
                     Date {sortBy === 'date' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕'}
                   </button>
                 </th>
-                <th scope="col">Tags</th>
+                <th scope="col" aria-label="Tag assignment"></th>
               </tr>
             </thead>
             <tbody>
@@ -516,37 +516,37 @@ function VideoRow({
       </td>
       <td><time dateTime={video.videoDate}>{formattedDate}</time></td>
       <td>
-        <p>{video.tags.length > 0 ? video.tags.join(', ') : '—'}</p>
-        <fieldset className="video-tag-assignment" disabled={savingTags}>
-          <legend>Assign tags to {video.videoName}</legend>
+        <fieldset
+          className="video-tag-assignment"
+          aria-label={`Tags for ${video.videoName}`}
+          disabled={savingTags}
+        >
           {tags.length === 0 ? (
             <p>No tags available.</p>
           ) : (
             <>
-              <div className="video-tag-labels" aria-label={`Current tags for ${video.videoName}`}>
-                {selectedTagNames.map((tagName) => (
-                  <span className="video-tag-label" key={tagName}>
-                    {tagName}
-                    <button
-                      type="button"
-                      aria-label={`Remove ${tagName} tag from ${video.videoName}`}
-                      onClick={() => {
-                        setTagSaveError('')
-                        void updateTags(selectedTagNames.filter((current) => current !== tagName))
-                      }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <label className="video-tag-input-label" htmlFor={inputId}>
-                Add a tag
-              </label>
               <div className="video-tag-input-wrapper">
+                <div className="video-tag-labels" aria-label={`Current tags for ${video.videoName}`}>
+                  {selectedTagNames.map((tagName) => (
+                    <span className="video-tag-label" key={tagName}>
+                      {tagName}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${tagName} tag from ${video.videoName}`}
+                        onClick={() => {
+                          setTagSaveError('')
+                          void updateTags(selectedTagNames.filter((current) => current !== tagName))
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
                 <input
                   id={inputId}
                   type="text"
+                  aria-label={`Add a tag to ${video.videoName}`}
                   role="combobox"
                   aria-autocomplete="list"
                   aria-expanded={showSuggestions}
